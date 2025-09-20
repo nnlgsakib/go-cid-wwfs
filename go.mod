@@ -3,7 +3,7 @@ module github.com/nnlgsakib/go-cid-wwfs
 require (
 	github.com/multiformats/go-multibase v0.2.0
 	github.com/multiformats/go-multihash v0.2.3
-	github.com/multiformats/go-varint v0.0.7
+	github.com/multiformats/go-varint v0.1.0
 	lukechampine.com/blake3 v1.1.6
 )
 
@@ -18,4 +18,4 @@ require (
 	golang.org/x/sys v0.28.0 // indirect
 )
 
-go 1.22
+go 1.23
