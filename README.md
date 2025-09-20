@@ -22,7 +22,7 @@ It is used in `go-ipfs` and related packages to refer to a typed hunk of data.
 
 - [Install](#install)
 - [Usage](#usage)
- - [CID v2](#cid-v2)
+ - [CID v4](#cid-v4)
 - [API](#api)
 - [Contribute](#contribute)
 - [License](#license)
@@ -105,12 +105,12 @@ if !c.Equals(other) {
 
 ```
 
-## CID v2
+## CID v4
 
-This module additionally supports a custom CID version 2 textual format for specialized use-cases. CID v2 values are 42-character strings:
+This module additionally supports a custom CID version 4 textual format for specialized use-cases. CID v4 values are 42-character strings:
 
 - Prefix: `wwfs`
-- Digest: first 38 lowercase-hex characters of a BLAKE3-256 digest
+- Digest: first 38 hex characters (lowercase when generated) of a BLAKE3-256 digest (i.e., hex of the first 19 bytes)
 
 Creation and parsing:
 
@@ -120,20 +120,22 @@ import (
 )
 
 data := []byte("custom v2 data")
-v2 := cid.NewCidV2FromBytes(data)
-fmt.Println(v2.String()) // e.g. "wwfs..." (42 chars)
-fmt.Println(v2.Version()) // 2
+v4 := cid.NewCidV4FromBytes(data)
+fmt.Println(v4.String()) // e.g. "wwfs..." (42 chars)
+fmt.Println(v4.Version()) // 4
 
 // Parse textual form back to a CID
-same, err := cid.Decode(v2.String())
+same, err := cid.Decode(v4.String())
 if err != nil { /* handle */ }
-fmt.Println(v2.Equals(same)) // true
+fmt.Println(v4.Equals(same)) // true
 ```
 
 Notes:
 - CID v0 and v1 behavior remains unchanged.
-- CID v2 does not use multibase or multicodec; `String()`, `Encode()`, and `StringOfBase()` return the canonical textual form.
-- `CidFromBytes` recognizes the 42-byte ASCII form and returns CID v2.
+- CID v4 does not use multibase or multicodec; `String()`, `Encode()`, and `StringOfBase()` return the canonical textual form.
+- `CidFromBytes` recognizes the 42-byte ASCII form and returns CID v4.
+- `IsCidV4String`, `CidV4DigestHex`, and `CidV4FromReader` are provided for validation, digest extraction, and streaming reads.
+- `CanonicalizeCidV4` returns the canonical lowercase form of a v4 string.
 
 ## Contribute
 

@@ -238,9 +238,9 @@ func Decode(v string) (Cid, error) {
         return tryNewCidV0(hash)
     }
 
-    // CIDv2: custom textual form: "wwfs" + 38 hex chars (total 42)
-    if isCidV2String(v) {
-        return Cid{v}, nil
+    // CIDv4: custom textual form: "wwfs" + 38 hex chars (total 42)
+    if isCidV4String(v) {
+        return Cid{normalizeCidV4(v)}, nil
     }
 
 	_, data, err := mbase.Decode(v)
@@ -262,8 +262,8 @@ func ExtractEncoding(v string) (mbase.Encoding, error) {
         return mbase.Base58BTC, nil
     }
 
-    // CIDv2 has no multibase prefix; return a neutral value with no error
-    if isCidV2String(v) {
+    // CIDv4 has no multibase prefix; return a neutral value with no error
+    if isCidV4String(v) {
         return 0, nil
     }
 
@@ -329,9 +329,9 @@ func (c Cid) Version() uint64 {
     if len(c.str) == 34 && c.str[0] == 18 && c.str[1] == 32 {
         return 0
     }
-    // CIDv2 textual form: wwfs + 38 hex chars
-    if isCidV2String(c.str) {
-        return 2
+    // CIDv4 textual form: wwfs + 38 hex chars
+    if isCidV4String(c.str) {
+        return 4
     }
     return 1
 }
@@ -360,8 +360,8 @@ func (c Cid) String() string {
         }
 
         return mbstr
-    case 2:
-        // CIDv2 is already a textual form
+    case 4:
+        // CIDv4 is already a textual form
         return c.str
     default:
         panic("not possible to reach this point")
@@ -379,8 +379,8 @@ func (c Cid) StringOfBase(base mbase.Encoding) (string, error) {
         return c.Hash().B58String(), nil
     case 1:
         return mbase.Encode(base, c.Bytes())
-    case 2:
-        // No multibase conversion for v2; return canonical textual form
+    case 4:
+        // No multibase conversion for v4; return canonical textual form
         return c.str, nil
     default:
         panic("not possible to reach this point")
@@ -396,8 +396,8 @@ func (c Cid) Encode(base mbase.Encoder) string {
         return c.Hash().B58String()
     case 1:
         return base.Encode(c.Bytes())
-    case 2:
-        // No multibase conversion for v2; return canonical textual form
+    case 4:
+        // No multibase conversion for v4; return canonical textual form
         return c.str
     default:
         panic("not possible to reach this point")
@@ -412,8 +412,8 @@ func (c Cid) Hash() mh.Multihash {
         return mh.Multihash(bytes)
     }
 
-    if c.Version() == 2 {
-        // CIDv2 does not embed a multihash; return nil
+    if c.Version() == 4 {
+        // CIDv4 does not embed a multihash; return nil
         return nil
     }
 
@@ -550,9 +550,9 @@ func (c Cid) Prefix() Prefix {
         }
     }
 
-    if c.Version() == 2 {
-        // No multicodec/multihash metadata for v2 textual form
-        return Prefix{Version: 2}
+    if c.Version() == 4 {
+        // No multicodec/multihash metadata for v4 textual form
+        return Prefix{Version: 4}
     }
 
 	offset := 0
@@ -668,9 +668,9 @@ func PrefixFromBytes(buf []byte) (Prefix, error) {
 }
 
 func CidFromBytes(data []byte) (int, Cid, error) {
-    // CIDv2 textual form support
-    if len(data) == 42 && isCidV2String(string(data)) {
-        return 42, Cid{string(data)}, nil
+    // CIDv4 textual form support
+    if len(data) == 42 && isCidV4String(string(data)) {
+        return 42, Cid{normalizeCidV4(string(data))}, nil
     }
     if len(data) > 2 && data[0] == mh.SHA2_256 && data[1] == 32 {
         if len(data) < 34 {
@@ -855,7 +855,7 @@ func CidFromReader(r io.Reader) (int, Cid, error) {
 
 // isCidV2String checks if the provided string matches the CIDv2 textual pattern
 // of "wwfs" followed by 38 lowercase hex characters, totaling 42 characters.
-func isCidV2String(s string) bool {
+func isCidV4String(s string) bool {
     if len(s) != 42 {
         return false
     }
@@ -864,9 +864,27 @@ func isCidV2String(s string) bool {
     }
     for i := 4; i < 42; i++ {
         c := s[i]
-        if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+        if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
             return false
         }
     }
     return true
+}
+
+// normalizeCidV4 lowercases the 38-hex digest part of a v4 string.
+func normalizeCidV4(s string) string {
+    // assume validated length and prefix
+    // Keep 'wwfs' prefix; lowercase digest to canonical form
+    // Allocate a new string only once using a byte buffer.
+    b := make([]byte, 42)
+    copy(b[:4], "wwfs")
+    // lowercase digest part
+    for i := 4; i < 42; i++ {
+        c := s[i]
+        if c >= 'A' && c <= 'F' {
+            c += 'a' - 'A'
+        }
+        b[i] = c
+    }
+    return string(b)
 }
