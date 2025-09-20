@@ -4,7 +4,7 @@ require (
 	github.com/multiformats/go-multibase v0.2.0
 	github.com/multiformats/go-multihash v0.2.3
 	github.com/multiformats/go-varint v0.0.7
-	lukechampine.com/blake3 v1.1.6
+	lukechampine.com/blake3 v1.4.1
 )
 
 require (
