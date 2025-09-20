@@ -4,9 +4,14 @@
 // distributed information systems. CIDs are used in the IPFS
 // (https://ipfs.io) project ecosystem.
 //
-// CIDs have two major versions. A CIDv0 corresponds to a multihash of type
-// DagProtobuf, is deprecated and exists for compatibility reasons. Usually,
-// CIDv1 should be used.
+// CIDs have two major versions in the standard spec (v0 and v1). A CIDv0
+// corresponds to a multihash of type DagProtobuf, is deprecated and exists for
+// compatibility reasons. Usually, CIDv1 should be used.
+//
+// This implementation additionally supports a custom, textual CIDv4 used in
+// this project: a 42-character string in the form "wwfs" + 38 hex chars of a
+// BLAKE3-256 digest (first 19 bytes). CIDv4 is not part of the standard spec
+// and does not use multibase/multicodec; it is handled as a distinct version.
 //
 // A CIDv1 has four parts:
 //
@@ -20,14 +25,14 @@
 package cid
 
 import (
-    "bytes"
-    "encoding"
-    "encoding/binary"
-    "encoding/json"
-    "errors"
-    "fmt"
-    "io"
-    "strings"
+	"bytes"
+	"encoding"
+	"encoding/binary"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"strings"
 
 	mbase "github.com/multiformats/go-multibase"
 	mh "github.com/multiformats/go-multihash"
@@ -225,23 +230,23 @@ func MustParse(v interface{}) Cid {
 // starting with "Qm" are considered CidV0 and treated directly
 // as B58-encoded multihashes.
 func Decode(v string) (Cid, error) {
-    if len(v) < 2 {
-        return Undef, ErrCidTooShort
-    }
+	if len(v) < 2 {
+		return Undef, ErrCidTooShort
+	}
 
-    if len(v) == 46 && v[:2] == "Qm" {
-        hash, err := mh.FromB58String(v)
-        if err != nil {
-            return Undef, ErrInvalidCid{err}
-        }
+	if len(v) == 46 && v[:2] == "Qm" {
+		hash, err := mh.FromB58String(v)
+		if err != nil {
+			return Undef, ErrInvalidCid{err}
+		}
 
-        return tryNewCidV0(hash)
-    }
+		return tryNewCidV0(hash)
+	}
 
-    // CIDv4: custom textual form: "wwfs" + 38 hex chars (total 42)
-    if isCidV4String(v) {
-        return Cid{normalizeCidV4(v)}, nil
-    }
+	// CIDv4: custom textual form: "wwfs" + 38 hex chars (total 42)
+	if isCidV4String(v) {
+		return Cid{normalizeCidV4(v)}, nil
+	}
 
 	_, data, err := mbase.Decode(v)
 	if err != nil {
@@ -254,18 +259,18 @@ func Decode(v string) (Cid, error) {
 // Extract the encoding from a Cid.  If Decode on the same string did
 // not return an error neither will this function.
 func ExtractEncoding(v string) (mbase.Encoding, error) {
-    if len(v) < 2 {
-        return -1, ErrCidTooShort
-    }
+	if len(v) < 2 {
+		return -1, ErrCidTooShort
+	}
 
-    if len(v) == 46 && v[:2] == "Qm" {
-        return mbase.Base58BTC, nil
-    }
+	if len(v) == 46 && v[:2] == "Qm" {
+		return mbase.Base58BTC, nil
+	}
 
-    // CIDv4 has no multibase prefix; return a neutral value with no error
-    if isCidV4String(v) {
-        return 0, nil
-    }
+	// CIDv4 has no multibase prefix; return a neutral value with no error
+	if isCidV4String(v) {
+		return 0, nil
+	}
 
 	encoding := mbase.Encoding(v[0])
 
@@ -326,14 +331,14 @@ func (c *Cid) UnmarshalText(text []byte) error {
 
 // Version returns the Cid version.
 func (c Cid) Version() uint64 {
-    if len(c.str) == 34 && c.str[0] == 18 && c.str[1] == 32 {
-        return 0
-    }
-    // CIDv4 textual form: wwfs + 38 hex chars
-    if isCidV4String(c.str) {
-        return 4
-    }
-    return 1
+	if len(c.str) == 34 && c.str[0] == 18 && c.str[1] == 32 {
+		return 0
+	}
+	// CIDv4 textual form: wwfs + 38 hex chars
+	if isCidV4String(c.str) {
+		return 4
+	}
+	return 1
 }
 
 // Type returns the multicodec-packed content type of a Cid.
@@ -350,72 +355,72 @@ func (c Cid) Type() uint64 {
 // Cid. Currently, Base32 is used for CIDV1 as the encoding for the
 // multibase string, Base58 is used for CIDV0.
 func (c Cid) String() string {
-    switch c.Version() {
-    case 0:
-        return c.Hash().B58String()
-    case 1:
-        mbstr, err := mbase.Encode(mbase.Base32, c.Bytes())
-        if err != nil {
-            panic("should not error with hardcoded mbase: " + err.Error())
-        }
+	switch c.Version() {
+	case 0:
+		return c.Hash().B58String()
+	case 1:
+		mbstr, err := mbase.Encode(mbase.Base32, c.Bytes())
+		if err != nil {
+			panic("should not error with hardcoded mbase: " + err.Error())
+		}
 
-        return mbstr
-    case 4:
-        // CIDv4 is already a textual form
-        return c.str
-    default:
-        panic("not possible to reach this point")
-    }
+		return mbstr
+	case 4:
+		// CIDv4 is already a textual form
+		return c.str
+	default:
+		panic("not possible to reach this point")
+	}
 }
 
 // String returns the string representation of a Cid
 // encoded is selected base
 func (c Cid) StringOfBase(base mbase.Encoding) (string, error) {
-    switch c.Version() {
-    case 0:
-        if base != mbase.Base58BTC {
-            return "", ErrInvalidEncoding
-        }
-        return c.Hash().B58String(), nil
-    case 1:
-        return mbase.Encode(base, c.Bytes())
-    case 4:
-        // No multibase conversion for v4; return canonical textual form
-        return c.str, nil
-    default:
-        panic("not possible to reach this point")
-    }
+	switch c.Version() {
+	case 0:
+		if base != mbase.Base58BTC {
+			return "", ErrInvalidEncoding
+		}
+		return c.Hash().B58String(), nil
+	case 1:
+		return mbase.Encode(base, c.Bytes())
+	case 4:
+		// No multibase conversion for v4; return canonical textual form
+		return c.str, nil
+	default:
+		panic("not possible to reach this point")
+	}
 }
 
 // Encode return the string representation of a Cid in a given base
 // when applicable.  Version 0 Cid's are always in Base58 as they do
 // not take a multibase prefix.
 func (c Cid) Encode(base mbase.Encoder) string {
-    switch c.Version() {
-    case 0:
-        return c.Hash().B58String()
-    case 1:
-        return base.Encode(c.Bytes())
-    case 4:
-        // No multibase conversion for v4; return canonical textual form
-        return c.str
-    default:
-        panic("not possible to reach this point")
-    }
+	switch c.Version() {
+	case 0:
+		return c.Hash().B58String()
+	case 1:
+		return base.Encode(c.Bytes())
+	case 4:
+		// No multibase conversion for v4; return canonical textual form
+		return c.str
+	default:
+		panic("not possible to reach this point")
+	}
 }
 
 // Hash returns the multihash contained by a Cid.
 func (c Cid) Hash() mh.Multihash {
-    bytes := c.Bytes()
+	bytes := c.Bytes()
 
-    if c.Version() == 0 {
-        return mh.Multihash(bytes)
-    }
+	if c.Version() == 0 {
+		return mh.Multihash(bytes)
+	}
 
-    if c.Version() == 4 {
-        // CIDv4 does not embed a multihash; return nil
-        return nil
-    }
+	if c.Version() == 4 {
+		// CIDv4 does not embed a multihash; return nil
+		return nil
+	}
 
 	// skip version length
 	_, n1, _ := varint.FromUvarint(bytes)
@@ -541,19 +546,19 @@ func (c Cid) Loggable() map[string]interface{} {
 
 // Prefix builds and returns a Prefix out of a Cid.
 func (c Cid) Prefix() Prefix {
-    if c.Version() == 0 {
-        return Prefix{
-            MhType:   mh.SHA2_256,
-            MhLength: 32,
-            Version:  0,
-            Codec:    DagProtobuf,
-        }
-    }
+	if c.Version() == 0 {
+		return Prefix{
+			MhType:   mh.SHA2_256,
+			MhLength: 32,
+			Version:  0,
+			Codec:    DagProtobuf,
+		}
+	}
 
-    if c.Version() == 4 {
-        // No multicodec/multihash metadata for v4 textual form
-        return Prefix{Version: 4}
-    }
+	if c.Version() == 4 {
+		// No multicodec/multihash metadata for v4 textual form
+		return Prefix{Version: 4}
+	}
 
 	offset := 0
 	version, n, _ := uvarint(c.str[offset:])
@@ -668,14 +673,14 @@ func PrefixFromBytes(buf []byte) (Prefix, error) {
 }
 
 func CidFromBytes(data []byte) (int, Cid, error) {
-    // CIDv4 textual form support
-    if len(data) == 42 && isCidV4String(string(data)) {
-        return 42, Cid{normalizeCidV4(string(data))}, nil
-    }
-    if len(data) > 2 && data[0] == mh.SHA2_256 && data[1] == 32 {
-        if len(data) < 34 {
-            return 0, Undef, ErrInvalidCid{fmt.Errorf("not enough bytes for cid v0")}
-        }
+	// CIDv4 textual form support
+	if len(data) == 42 && isCidV4String(string(data)) {
+		return 42, Cid{normalizeCidV4(string(data))}, nil
+	}
+	if len(data) > 2 && data[0] == mh.SHA2_256 && data[1] == 32 {
+		if len(data) < 34 {
+			return 0, Undef, ErrInvalidCid{fmt.Errorf("not enough bytes for cid v0")}
+		}
 
 		h, err := mh.Cast(data[:34])
 		if err != nil {
@@ -850,41 +855,5 @@ func CidFromReader(r io.Reader) (int, Cid, error) {
 		return len(br.dst), Undef, ErrInvalidCid{err}
 	}
 
-    return len(br.dst), Cid{string(br.dst)}, nil
-}
-
-// isCidV2String checks if the provided string matches the CIDv2 textual pattern
-// of "wwfs" followed by 38 lowercase hex characters, totaling 42 characters.
-func isCidV4String(s string) bool {
-    if len(s) != 42 {
-        return false
-    }
-    if !strings.HasPrefix(s, "wwfs") {
-        return false
-    }
-    for i := 4; i < 42; i++ {
-        c := s[i]
-        if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-            return false
-        }
-    }
-    return true
-}
-
-// normalizeCidV4 lowercases the 38-hex digest part of a v4 string.
-func normalizeCidV4(s string) string {
-    // assume validated length and prefix
-    // Keep 'wwfs' prefix; lowercase digest to canonical form
-    // Allocate a new string only once using a byte buffer.
-    b := make([]byte, 42)
-    copy(b[:4], "wwfs")
-    // lowercase digest part
-    for i := 4; i < 42; i++ {
-        c := s[i]
-        if c >= 'A' && c <= 'F' {
-            c += 'a' - 'A'
-        }
-        b[i] = c
-    }
-    return string(b)
+	return len(br.dst), Cid{string(br.dst)}, nil
 }
